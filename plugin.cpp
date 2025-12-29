@@ -6,10 +6,12 @@ using Flag = RE::OBJ_BOOK::Flag;
 SkyPromptAPI::Prompt readPrompt{"", 0, 0, SkyPromptAPI::PromptType::kHold};
 std::array<SkyPromptAPI::Prompt, 1> prompts = {readPrompt};
 SkyPromptAPI::ClientID clientID;
-std::pair<RE::INPUT_DEVICE, uint32_t> key{INPUT_DEVICE::kKeyboard, 45};
+std::array<std::pair<RE::INPUT_DEVICE, uint32_t>, 2> keys{std::pair{INPUT_DEVICE::kKeyboard, 0},
+                                                          std::pair{INPUT_DEVICE::kGamepad, 0}};
 PlayerCharacter* player;
 FormID playerID;
 std::string promptText;
+std::string_view buttonEvent = "Ready Weapon";
 
 TESObjectBOOK *lastBook;
 
@@ -80,7 +82,9 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
         lastBook = book;
         SkyPromptAPI::RemovePrompt(&g_PromptSink, clientID);
         prompts[0].text = str_replace(promptText, "<name>", lastBook->GetName());
-        prompts[0].button_key = std::span{&key, 1};
+        keys[0].second = ControlMap::GetSingleton()->GetMappedKey(buttonEvent, INPUT_DEVICE::kKeyboard);
+        keys[1].second = ControlMap::GetSingleton()->GetMappedKey(buttonEvent, INPUT_DEVICE::kGamepad);
+        prompts[0].button_key = std::span{keys};
         SkyPromptAPI::SendPrompt(&g_PromptSink, clientID);
         return BSEventNotifyControl::kContinue;
     }
