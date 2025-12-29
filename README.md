@@ -1,6 +1,6 @@
 # NAME
 
-Mod is available at 
+Mod is available at https://www.nexusmods.com/skyrimspecialedition/mods/168337
 
 Based on CommonLibSSE NG:
 
