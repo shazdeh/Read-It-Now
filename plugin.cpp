@@ -11,7 +11,6 @@ std::array<std::pair<RE::INPUT_DEVICE, uint32_t>, 2> keys{std::pair{INPUT_DEVICE
 PlayerCharacter* player;
 FormID playerID;
 std::string promptText;
-std::string_view buttonEvent = "Ready Weapon";
 
 TESObjectBOOK *lastBook;
 
@@ -82,8 +81,10 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
         lastBook = book;
         SkyPromptAPI::RemovePrompt(&g_PromptSink, clientID);
         prompts[0].text = str_replace(promptText, "<name>", lastBook->GetName());
-        keys[0].second = ControlMap::GetSingleton()->GetMappedKey(buttonEvent, INPUT_DEVICE::kKeyboard);
-        keys[1].second = ControlMap::GetSingleton()->GetMappedKey(buttonEvent, INPUT_DEVICE::kGamepad);
+        keys[0].second =
+            ControlMap::GetSingleton()->GetMappedKey(UserEvents::GetSingleton()->readyWeapon, INPUT_DEVICE::kKeyboard);
+        keys[1].second =
+            ControlMap::GetSingleton()->GetMappedKey(UserEvents::GetSingleton()->readyWeapon, INPUT_DEVICE::kGamepad);
         prompts[0].button_key = std::span{keys};
         SkyPromptAPI::SendPrompt(&g_PromptSink, clientID);
         return BSEventNotifyControl::kContinue;
