@@ -1,4 +1,4 @@
-# NAME
+# Read It Now
 
 Mod is available at https://www.nexusmods.com/skyrimspecialedition/mods/168337
 
