@@ -13,6 +13,7 @@ FormID playerID;
 std::string promptText;
 
 TESObjectBOOK *lastBook;
+TESObjectREFR *tempRef;
 
 void SetCantTakeFlag() {
     lastBook->data.flags |= Flag::kCantTake;
@@ -57,13 +58,12 @@ public:
         if (event.type == SkyPromptAPI::PromptEventType::kAccepted) {
             TESObjectREFRPtr spawn = player->PlaceObjectAtMe(lastBook, false);
             if (spawn) {
-                TESObjectREFR* tempRef = spawn.get();
+                tempRef = spawn.get();
                 // temporarily mark the spawned book as CantTake so the player
                 // cannot pick up the spawned ref while reading
                 SetCantTakeFlag();
                 tempRef->ActivateRef(PlayerCharacter::GetSingleton(), 0, lastBook, 1, false);
                 tempRef->Disable();
-                tempRef->SetDelete(true);
                 RegisterForBookClose();
             }
         }
@@ -79,6 +79,7 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
         TESObjectBOOK *book = TESForm::LookupByID<TESObjectBOOK>(event->baseObj);
         if (!book || book->IsRead()) return BSEventNotifyControl::kContinue;
         lastBook = book;
+
         SkyPromptAPI::RemovePrompt(&g_PromptSink, clientID);
         prompts[0].text = str_replace(promptText, "<name>", lastBook->GetName());
         keys[0].second =
@@ -92,9 +93,11 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
 
     BSEventNotifyControl ProcessEvent(const MenuOpenCloseEvent *event, BSTEventSource<MenuOpenCloseEvent> *) {
         if (lastBook && !event->opening && event->menuName == BookMenu::MENU_NAME) {
+            tempRef->SetDelete(true);
             ClearCantTakeFlag();
             UnregisterForBookClose();
             lastBook = nullptr;
+            tempRef = nullptr;
         }
         return BSEventNotifyControl::kContinue;
     }
