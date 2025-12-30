@@ -11,6 +11,7 @@ std::array<std::pair<RE::INPUT_DEVICE, uint32_t>, 2> keys{std::pair{INPUT_DEVICE
 PlayerCharacter* player;
 FormID playerID;
 std::string promptText;
+TESQuest *readItNow;
 
 TESObjectBOOK *lastBook;
 TESObjectREFR *tempRef;
@@ -40,6 +41,30 @@ std::string str_replace(std::string_view haystack, std::string_view needle, std:
     }
 
     return result;
+}
+
+// this is handed via Papy so the RefAlias pointers don't need to be manually updated
+void GiveBackTheBook(TESObjectREFR* a_ref) {
+    auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+    if (!vm) return;
+    auto policy = vm->GetObjectHandlePolicy();
+    if (!policy) return;
+    RE::VMHandle handle = policy->GetHandleForObject(readItNow->GetFormType(), readItNow);
+    if (handle == policy->EmptyHandle()) return;
+
+    RE::BSFixedString scriptName = "ReadItNow_Script";
+    RE::BSFixedString functionName = "GiveBackToPlayer";
+
+    RE::BSTSmartPointer<RE::BSScript::Object> papyrusObject;
+    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> resultCallback;
+
+    if (!vm->FindBoundObject(handle, scriptName.c_str(), papyrusObject)) {
+        return;
+    }
+
+    auto args = RE::MakeFunctionArguments(std::move(a_ref));
+
+    vm->DispatchMethodCall1(papyrusObject, functionName, args, resultCallback);
 }
 
 class MyPromptSink : public SkyPromptAPI::PromptSink {
@@ -84,9 +109,10 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
 
     BSEventNotifyControl ProcessEvent(const MenuOpenCloseEvent *event, BSTEventSource<MenuOpenCloseEvent> *) {
         if (lastBook && !event->opening && event->menuName == BookMenu::MENU_NAME) {
-            if (tempRef && !tempRef->IsDeleted()) {
-                player->AddObjectToContainer(lastBook, &tempRef->extraList, 1, tempRef);
-                tempRef->SetDelete(true);
+            if (tempRef &&
+                !tempRef->IsDeleted() // using the Take prompt in Book menu marks the ref as "deleted"
+            ) {
+                GiveBackTheBook(tempRef);
             }
             UnregisterForBookClose();
             lastBook = nullptr;
@@ -102,6 +128,8 @@ void RegisterForBookClose() { UI::GetSingleton()->AddEventSink<MenuOpenCloseEven
 void UnregisterForBookClose() { UI::GetSingleton()->RemoveEventSink<MenuOpenCloseEvent>(&g_sink); }
 
 void Setup() {
+    readItNow = TESDataHandler::GetSingleton()->LookupForm<TESQuest>(0x800, "Read It Now.esp");
+    if (!readItNow) return;
     player = PlayerCharacter::GetSingleton();
     playerID = player->GetFormID();
     clientID = SkyPromptAPI::RequestClientID();
