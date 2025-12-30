@@ -15,14 +15,6 @@ std::string promptText;
 TESObjectBOOK *lastBook;
 TESObjectREFR *tempRef;
 
-void SetCantTakeFlag() {
-    lastBook->data.flags |= Flag::kCantTake;
-}
-
-void ClearCantTakeFlag() {
-    lastBook->data.flags &= static_cast<Flag>(~static_cast<std::underlying_type_t<Flag>>(Flag::kCantTake));
-}
-
 void RegisterForBookClose();
 void UnregisterForBookClose();
 
@@ -56,15 +48,14 @@ public:
 
     void ProcessEvent(SkyPromptAPI::PromptEvent event) const override {
         if (event.type == SkyPromptAPI::PromptEventType::kAccepted) {
-            TESObjectREFRPtr spawn = player->PlaceObjectAtMe(lastBook, false);
-            if (spawn) {
-                tempRef = spawn.get();
-                // temporarily mark the spawned book as CantTake so the player
-                // cannot pick up the spawned ref while reading
-                SetCantTakeFlag();
-                tempRef->ActivateRef(PlayerCharacter::GetSingleton(), 0, lastBook, 1, false);
-                tempRef->Disable();
-                RegisterForBookClose();
+            auto refhandle = player->DropObject(lastBook, nullptr, 1);
+            if (refhandle) {
+                tempRef = refhandle.get().get();
+                if (tempRef) {
+                    tempRef->ActivateRef(player, 0, lastBook, 1, false);
+                    tempRef->Disable();
+                    RegisterForBookClose();
+                }
             }
         }
     };
@@ -93,8 +84,10 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
 
     BSEventNotifyControl ProcessEvent(const MenuOpenCloseEvent *event, BSTEventSource<MenuOpenCloseEvent> *) {
         if (lastBook && !event->opening && event->menuName == BookMenu::MENU_NAME) {
-            tempRef->SetDelete(true);
-            ClearCantTakeFlag();
+            if (tempRef && !tempRef->IsDeleted()) {
+                player->AddObjectToContainer(lastBook, &tempRef->extraList, 1, tempRef);
+                tempRef->SetDelete(true);
+            }
             UnregisterForBookClose();
             lastBook = nullptr;
             tempRef = nullptr;
