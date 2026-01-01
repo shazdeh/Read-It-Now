@@ -12,6 +12,10 @@ PlayerCharacter* player;
 FormID playerID;
 std::string promptText;
 TESQuest *readItNow;
+BGSKeyword *exclusionKeyword;
+std::string_view modName = "Read It Now.esp";
+bool bSpellTomes = true;
+bool bSkillBooks = true;
 
 TESObjectBOOK *lastBook;
 TESObjectREFR *tempRef;
@@ -73,13 +77,17 @@ public:
 
     void ProcessEvent(SkyPromptAPI::PromptEvent event) const override {
         if (event.type == SkyPromptAPI::PromptEventType::kAccepted) {
-            auto refhandle = player->DropObject(lastBook, nullptr, 1);
-            if (refhandle) {
-                tempRef = refhandle.get().get();
-                if (tempRef) {
-                    tempRef->ActivateRef(player, 0, lastBook, 1, false);
-                    tempRef->Disable();
-                    RegisterForBookClose();
+            if (lastBook->TeachesSpell()) {
+                lastBook->Read(player);
+            } else {
+                auto refhandle = player->DropObject(lastBook, nullptr, 1);
+                if (refhandle) {
+                    tempRef = refhandle.get().get();
+                    if (tempRef) {
+                        tempRef->ActivateRef(player, 0, lastBook, 1, false);
+                        tempRef->Disable();
+                        RegisterForBookClose();
+                    }
                 }
             }
         }
@@ -92,8 +100,14 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
     BSEventNotifyControl ProcessEvent(const TESContainerChangedEvent *event,
                                       BSTEventSource<TESContainerChangedEvent> *) {
         if (!event || event->newContainer != playerID) return BSEventNotifyControl::kContinue;
+        if (UI::GetSingleton()->IsMenuOpen(MainMenu::MENU_NAME) ||
+            UI::GetSingleton()->IsMenuOpen(LoadingMenu::MENU_NAME))
+            return BSEventNotifyControl::kContinue;
         TESObjectBOOK *book = TESForm::LookupByID<TESObjectBOOK>(event->baseObj);
-        if (!book || book->IsRead()) return BSEventNotifyControl::kContinue;
+        if (!book || book->IsRead() || book->HasKeyword(exclusionKeyword)) return BSEventNotifyControl::kContinue;
+        if ((!bSkillBooks && book->TeachesSkill()) || (!bSpellTomes && book->TeachesSpell()))
+            return BSEventNotifyControl::kContinue;
+
         lastBook = book;
 
         SkyPromptAPI::RemovePrompt(&g_PromptSink, clientID);
@@ -116,7 +130,6 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
             }
             UnregisterForBookClose();
             lastBook = nullptr;
-            tempRef = nullptr;
         }
         return BSEventNotifyControl::kContinue;
     }
@@ -125,16 +138,29 @@ class EventHandler : public BSTEventSink<TESContainerChangedEvent>, public BSTEv
 static EventHandler g_sink;
 
 void RegisterForBookClose() { UI::GetSingleton()->AddEventSink<MenuOpenCloseEvent>(&g_sink); };
+
 void UnregisterForBookClose() { UI::GetSingleton()->RemoveEventSink<MenuOpenCloseEvent>(&g_sink); }
 
+void LoadConfig() {
+    CSimpleIniA ini;
+    std::string filePath = "Data/SKSE/Plugins/ReadItNow.ini";
+    if (ini.LoadFile(filePath.c_str()) == SI_OK) {
+        bSpellTomes = ini.GetBoolValue("Main", "bShowForSpellTomes", true);
+        bSkillBooks = ini.GetBoolValue("Main", "bShowForSkillBooks", true);
+    }
+}
+
 void Setup() {
-    readItNow = TESDataHandler::GetSingleton()->LookupForm<TESQuest>(0x800, "Read It Now.esp");
+    readItNow = TESDataHandler::GetSingleton()->LookupForm<TESQuest>(0x800, modName);
     if (!readItNow) return;
+    exclusionKeyword = TESDataHandler::GetSingleton()->LookupForm<BGSKeyword>(0x801, modName);
+    if (!exclusionKeyword) return;
     player = PlayerCharacter::GetSingleton();
     playerID = player->GetFormID();
     clientID = SkyPromptAPI::RequestClientID();
     i18n::pluginName = "ReadItNow";
     promptText = i18n::GetTranslation("Main", "sReadPrompt");
+    LoadConfig();
     ScriptEventSourceHolder::GetSingleton()->AddEventSink<TESContainerChangedEvent>(&g_sink);
 }
 
